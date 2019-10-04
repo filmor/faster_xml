@@ -1,0 +1,15 @@
+[package]
+name = "faster_xml_nif"
+version = "0.1.0"
+authors = ["Benedikt Reinartz <filmor@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "faster_xml_nif"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
+[dependencies]
+rustler = "0.21"
+lazy_static = "1.4.0"
+quick-xml = "0.16.1"
