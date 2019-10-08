@@ -54,5 +54,5 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
         }
     }
 
-    Ok((atoms::ok(), count).encode(env))
+    Ok((atoms::ok(),).encode(env))
 }
