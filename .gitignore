@@ -10,3 +10,5 @@ rel/example_project
 .rebar
 _build/
 priv/
+target/
+_checkouts/

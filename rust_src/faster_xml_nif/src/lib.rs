@@ -38,7 +38,7 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
         thread_env.run(|env| {
             let pid: Pid = match copied_pid.load(env).decode() {
                 Ok(pid) => pid,
-                Err(e) => e,
+                Err(_) => return,
             };
 
             let data: Binary = match copied_data.load(env).decode() {
