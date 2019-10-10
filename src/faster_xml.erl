@@ -9,6 +9,7 @@
 
 init() ->
     {ok, Lib} = find_crate:find_library(?MODULE, "faster_xml_nif"),
+    io:format("~s", [Lib]),
     erlang:load_nif(Lib, 0).
 
 
