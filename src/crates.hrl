@@ -1,0 +1,4 @@
+-ifndef(CRATES_HRL).
+-define(CRATES_HRL, 1).
+-define(crate_faster_xml_nif, undefined).
+-endif.

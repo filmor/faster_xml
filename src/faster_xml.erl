@@ -1,5 +1,7 @@
 -module(faster_xml).
 
+-include("crates.hrl").
+
 -export([
     parse/1,
     parse_file/1
@@ -8,9 +10,7 @@
 -on_load(init/0).
 
 init() ->
-    {ok, Lib} = find_crate:find_library(?MODULE, "faster_xml_nif"),
-    io:format("~s", [Lib]),
-    erlang:load_nif(Lib, 0).
+    erlang:load_nif(?crate_faster_xml_nif, 0).
 
 
 parse(Bin) ->
