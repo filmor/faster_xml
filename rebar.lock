@@ -1,4 +1,1 @@
-[{<<"find_crate">>,
-  {git,"https://github.com/goertzenator/find_crate.git",
-       {ref,"eb6231ff610c31352d968a82a5ff7adf24b49971"}},
-  0}].
+[].
