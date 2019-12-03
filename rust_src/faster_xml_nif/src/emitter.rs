@@ -27,7 +27,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             element,
             child: None,
             output: atoms::undefined().encode(env),
-            depth: 0,
+            depth: 1,
             is_object: match element.content {
                 Content::Element(_) => false,
                 Content::Object(_) => true,
@@ -35,9 +35,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
         };
 
         assert!(start_tag.name() == element.name.as_bytes());
+        // dbg!(&element.name);
 
         if res.is_object {
-            let output = Term::map_new(env);
+            let mut output = Term::map_new(env);
 
             for attr in start_tag.attributes().filter_map(|x| x.ok()) {
                 let key = String::from_utf8(attr.key.to_vec()).unwrap();
@@ -45,7 +46,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
                     let attr_value = std::str::from_utf8(&attr.value).unwrap();
                     if let Some(result) = to_erlang(env, *typ, attr_value) {
                         let attr_key = format!("@{}", key).encode(env);
-                        output.map_put(attr_key, result);
+                        output = output.map_put(attr_key, result).ok().unwrap();
                     }
                 }
             }
@@ -76,7 +77,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
             child.text(text);
         }
 
-        if self.depth == 0 && !self.is_object {
+        if self.depth == 1 && !self.is_object {
             if let Content::Element(typ) = self.element.content {
                 if let Some(value) = to_erlang(self.env, typ, std::str::from_utf8(text).unwrap()) {
                     self.output = value;
@@ -90,8 +91,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         if let Some(ref mut child) = self.child {
             if child.end(end) {
-                self.output
-                    .map_put(child.element.name.encode(self.env), child.output());
+                self.output = self.output
+                    .map_put(child.element.name.encode(self.env), child.output())
+                    .ok()
+                    .unwrap();
+
                 self.child = None;
             }
         }
@@ -102,6 +106,10 @@ impl<'a, 'b> Emitter<'a, 'b> {
     pub fn output(&self) -> Term<'a> {
         self.output
     }
+
+    pub fn name(&self) -> &str {
+        &self.element.name
+    }
 }
 
 fn to_erlang<'a>(env: Env<'a>, typ: Type, s: &str) -> Option<Term<'a>> {
@@ -110,7 +118,7 @@ fn to_erlang<'a>(env: Env<'a>, typ: Type, s: &str) -> Option<Term<'a>> {
     match typ {
         Int => Some(s.parse::<i64>().ok()?.encode(env)),
         Float => Some(s.parse::<f64>().ok()?.encode(env)),
-        Timestamp => None,
+        Timestamp => Some(atoms::undefined().encode(env)),
         String => Some(s.encode(env)),
     }
 }

@@ -94,7 +94,7 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                         let mut to_delete = vec![];
                         for (n, emitter) in pending_emitters.iter_mut().enumerate() {
                             if emitter.end(t) {
-                                env.send(&pid, emitter.output());
+                                env.send(&pid, (emitter.name(), emitter.output()).encode(env));
                                 to_delete.push(n);
                             }
                         }
@@ -105,7 +105,7 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                     }
                     Ok(Event::Empty(ref t)) => {
                         if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap()) {
-                            env.send(&pid, Emitter::start(env, el, t).output());
+                            env.send(&pid, (&el.name, Emitter::start(env, el, t).output()).encode(env));
                         }
                     }
                     Ok(Event::Eof) => break (),
@@ -130,8 +130,6 @@ fn format_error(err: Error) -> String {
 
 fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> {
     let mut spec = ReadSpec::new();
-
-    println!("Trying to read map");
 
     for (key, value) in map {
         let name: &str = key.decode()?;

@@ -32,8 +32,14 @@ parse_file(FName, Pattern) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-epex_test() ->
-    ok = parse_file(
+epex_test_() ->
+    {timeout, 30, ?_assert(epex_case())}.
+
+epias_test_() ->
+    {timeout, 30, ?_assert(epias_case())}.
+
+epex_case() ->
+    ok = faster_xml:parse_file(
         "epex.xml",
         #{
             <<"PblcTradeConf">> => #{
@@ -45,12 +51,24 @@ epex_test() ->
         }
     ),
 
-    flush(),
+    {N, {<<"PblcTradeConf">>, Last}} = flush(0, undefined),
 
-    ok.
+    ?assert(N > 0),
 
-epias_test() ->
-    ok = parse_file(
+    ?assertMatch(
+        #{
+            <<"@qty">> := _,
+            <<"@px">> := _,
+            <<"@tradeExecTime">> := _,
+            <<"@revisionNo">> := _
+        },
+        Last
+    ),
+
+    true.
+
+epias_case() ->
+    ok = faster_xml:parse_file(
         "epias.xml",
         #{
             <<"Teklif">> => #{
@@ -61,17 +79,27 @@ epias_test() ->
         }
     ),
 
-    flush(),
+    {N, {<<"Teklif">>, Last}} = flush(0, undefined),
 
-    ok.
+    ?assert(N > 0),
+
+    ?assertMatch(
+        #{
+            <<"fiyat">> := _,
+            <<"miktar">> := _,
+            <<"kalanMiktar">> := _
+        },
+        Last
+    ),
+
+    true.
 
 
-flush() ->
-    receive Msg ->
-        io:format("~p~n", [Msg]),
-        flush()
+flush(N, Last) ->
+    receive _Msg ->
+        flush(N + 1, _Msg)
     after 1000 ->
-        ok
+        {N, Last}
     end.
 
 -endif.
