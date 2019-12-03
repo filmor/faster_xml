@@ -1,4 +1,5 @@
 use crate::element::{Content, Element, Type};
+use chrono::{Datelike, Timelike};
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
@@ -91,7 +92,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         if let Some(ref mut child) = self.child {
             if child.end(end) {
-                self.output = self.output
+                self.output = self
+                    .output
                     .map_put(child.element.name.encode(self.env), child.output())
                     .ok()
                     .unwrap();
@@ -118,7 +120,19 @@ fn to_erlang<'a>(env: Env<'a>, typ: Type, s: &str) -> Option<Term<'a>> {
     match typ {
         Int => Some(s.parse::<i64>().ok()?.encode(env)),
         Float => Some(s.parse::<f64>().ok()?.encode(env)),
-        Timestamp => Some(atoms::undefined().encode(env)),
+        Timestamp => {
+            let dt = chrono::DateTime::parse_from_rfc3339(s).ok()?;
+            Some(
+                (
+                    (
+                        (dt.year(), dt.month(), dt.day()),
+                        (dt.hour(), dt.minute(), dt.second()),
+                    ),
+                    dt.timestamp_subsec_millis(),
+                )
+                    .encode(env),
+            )
+        }
         String => Some(s.encode(env)),
     }
 }

@@ -15,7 +15,6 @@ impl ReadSpec {
     }
 
     pub fn add(&mut self, name: &str, element: Element) {
-        dbg!("Adding {} => {:?}", name, &element);
         self.patterns.insert(name.to_string(), element);
     }
 }
