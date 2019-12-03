@@ -1,13 +1,21 @@
-mod read_spec;
 mod element;
-use crate::read_spec::ReadSpec;
+mod emitter;
+mod read_spec;
 
+use crate::element::{Element, Type};
+use crate::read_spec::ReadSpec;
+use crate::emitter::Emitter;
+
+use rustler::Atom;
+use rustler::MapIterator;
+
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::thread;
 
 use rustler;
 use rustler::types::{Binary, Pid};
-use rustler::{Encoder, Env, NifResult, OwnedEnv, Term, Error};
+use rustler::{Encoder, Env, Error, NifResult, OwnedEnv, Term};
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -18,6 +26,10 @@ mod atoms {
         atom start;
         atom end;
         atom empty;
+
+        atom timestamp;
+        atom int;
+        atom float;
     }
 }
 
@@ -38,14 +50,13 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
     let copied_pid = thread_env.save(args[0]);
     let copied_data = thread_env.save(args[1]);
 
-    let spec = spec_from_map(args[1]);
+    let spec = spec_from_map(env, args[2].decode()?)?;
 
     thread::spawn(move || {
         thread_env.run(|env| {
             let pid: Pid = match copied_pid.load(env).decode() {
                 Ok(pid) => pid,
-                Err(err) =>
-                panic!(format!("Failed to get PID: {}", format_error(err))),
+                Err(err) => panic!(format!("Failed to get PID: {}", format_error(err))),
             };
 
             let data: Binary = match copied_data.load(env).decode() {
@@ -58,14 +69,49 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
 
             let mut buf = Vec::new();
 
+            let mut emitters: HashMap<_, _> = spec.patterns
+                .iter()
+                .map(|(name, el)| {
+                    (name.as_bytes(), |s| Emitter::start(&env, &el, s))
+                }).collect();
+
+            let mut pending_emitters: Vec<Emitter> = vec![];
+
             loop {
                 match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref t)) => {
-                        env.send(&pid, (atoms::start(), t.name()).encode(env))
+                        for emitter in pending_emitters.iter_mut() {
+                            emitter.start_child(t);
+                        }
+
+                        if let Some(func) = emitters.get(t.name()) {
+                            pending_emitters.push(func(t));
+                        }
                     }
-                    Ok(Event::Text(ref t)) => {}
-                    Ok(Event::End(ref t)) => env.send(&pid, (atoms::end(), t.name()).encode(env)),
+
+                    Ok(Event::Text(ref t)) => {
+                        for emitter in pending_emitters.iter_mut() {
+                            emitter.text(t);
+                        }
+                    }
+
+                    Ok(Event::End(ref t)) => {
+                        let to_delete = vec![];
+                        for (n, emitter) in pending_emitters.iter_mut().enumerate() {
+                            if emitter.end(t) {
+                                env.send(&pid, emitter.output().encode(env));
+                                to_delete.push(n);
+                            }
+                        }
+
+                        for n in to_delete.iter().rev() {
+                            pending_emitters.swap_remove(*n);
+                        }
+                    }
                     Ok(Event::Empty(ref t)) => {
+                        if let Some(func) = emitters.get(t.name()) {
+                            func(t)
+                        }
                         env.send(&pid, (atoms::empty(), t.name()).encode(env))
                     }
                     Ok(Event::Eof) => break (),
@@ -79,17 +125,74 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
     Ok((atoms::ok()).encode(env))
 }
 
-
 fn format_error(err: Error) -> String {
     match err {
         Error::BadArg => format!("badarg"),
         Error::Atom(s) => format!("{}", s),
         Error::RaiseAtom(s) => format!("raise {}", s),
-        Error::RaiseTerm(_enc) => format!("raising term")
+        Error::RaiseTerm(_enc) => format!("raising term"),
     }
 }
 
+fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> {
+    let mut spec = ReadSpec::new();
 
-fn spec_from_map<'a>(term: Term<'a>) -> ReadSpec {
-    unimplemented!()
+    println!("Trying to read map");
+
+    for (key, value) in map {
+        let name: &str = key.decode()?;
+
+        dbg!(name);
+
+        spec.add(name, element_from_map(env, name, value)?);
+    }
+
+    Ok(spec)
+}
+
+fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<Element> {
+    if term.is_map() {
+        if name.starts_with('@') {
+            dbg!(name);
+            return Err(Error::BadArg);
+        }
+
+        let mut attributes = HashMap::new();
+        let mut content = HashMap::new();
+        let map: MapIterator = term.decode()?;
+
+        for (key, val) in map {
+            let inner_name: &str = key.decode()?;
+            dbg!(inner_name);
+
+            if inner_name.starts_with('@') {
+                let value = as_type(val)?;
+                attributes.insert(inner_name.chars().skip(1).collect(), value);
+            } else {
+                let value = element_from_map(env, inner_name, val)?;
+                content.insert(inner_name.to_owned(), value);
+            }
+        }
+
+        Ok(Element::object(name, attributes, content))
+    } else if term.is_atom() {
+        Ok(Element::element(name, HashMap::new(), as_type(term)?))
+    } else {
+        dbg!(term);
+        Err(Error::BadArg)
+    }
+}
+
+fn as_type<'a>(term: Term<'a>) -> NifResult<Type> {
+    let type_: Atom = term.decode()?;
+
+    if type_ == atoms::int() {
+        Ok(Type::Int)
+    } else if type_ == atoms::float() {
+        Ok(Type::Float)
+    } else if type_ == atoms::timestamp() {
+        Ok(Type::Timestamp)
+    } else {
+        Err(Error::BadArg)
+    }
 }
