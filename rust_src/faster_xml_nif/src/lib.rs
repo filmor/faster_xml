@@ -3,8 +3,8 @@ mod emitter;
 mod read_spec;
 
 use crate::element::{Element, Type};
-use crate::read_spec::ReadSpec;
 use crate::emitter::Emitter;
+use crate::read_spec::ReadSpec;
 
 use rustler::Atom;
 use rustler::MapIterator;
@@ -30,6 +30,7 @@ mod atoms {
         atom timestamp;
         atom int;
         atom float;
+        atom string;
     }
 }
 
@@ -47,9 +48,9 @@ pub fn on_load<'a>(_env: Env<'a>, _load_info: Term<'a>) -> bool {
 
 fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
     let thread_env = OwnedEnv::new();
-    let copied_pid = thread_env.save(args[0]);
     let copied_data = thread_env.save(args[1]);
 
+    let copied_pid = thread_env.save(args[0]);
     let spec = spec_from_map(env, args[2].decode()?)?;
 
     thread::spawn(move || {
@@ -69,12 +70,6 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
 
             let mut buf = Vec::new();
 
-            let mut emitters: HashMap<_, _> = spec.patterns
-                .iter()
-                .map(|(name, el)| {
-                    (name.as_bytes(), |s| Emitter::start(&env, &el, s))
-                }).collect();
-
             let mut pending_emitters: Vec<Emitter> = vec![];
 
             loop {
@@ -84,8 +79,8 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                             emitter.start_child(t);
                         }
 
-                        if let Some(func) = emitters.get(t.name()) {
-                            pending_emitters.push(func(t));
+                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap()) {
+                            pending_emitters.push(Emitter::start(env, el, t));
                         }
                     }
 
@@ -96,10 +91,10 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                     }
 
                     Ok(Event::End(ref t)) => {
-                        let to_delete = vec![];
+                        let mut to_delete = vec![];
                         for (n, emitter) in pending_emitters.iter_mut().enumerate() {
                             if emitter.end(t) {
-                                env.send(&pid, emitter.output().encode(env));
+                                env.send(&pid, emitter.output());
                                 to_delete.push(n);
                             }
                         }
@@ -109,10 +104,9 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                         }
                     }
                     Ok(Event::Empty(ref t)) => {
-                        if let Some(func) = emitters.get(t.name()) {
-                            func(t)
+                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap()) {
+                            env.send(&pid, Emitter::start(env, el, t).output());
                         }
-                        env.send(&pid, (atoms::empty(), t.name()).encode(env))
                     }
                     Ok(Event::Eof) => break (),
                     Ok(_) => (),
@@ -192,6 +186,8 @@ fn as_type<'a>(term: Term<'a>) -> NifResult<Type> {
         Ok(Type::Float)
     } else if type_ == atoms::timestamp() {
         Ok(Type::Timestamp)
+    } else if type_ == atoms::string() {
+        Ok(Type::String)
     } else {
         Err(Error::BadArg)
     }

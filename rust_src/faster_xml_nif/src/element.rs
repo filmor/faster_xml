@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Element {
     pub name: String,
     pub attributes: HashMap<String, Type>,
@@ -25,7 +25,7 @@ impl Element {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Content {
     Element(Type),
     Object(HashMap<String, Element>),
@@ -36,4 +36,5 @@ pub(crate) enum Type {
     Int,
     Float,
     Timestamp,
+    String,
 }

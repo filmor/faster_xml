@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::element::Element;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ReadSpec {
     pub patterns: HashMap<String, Element>
 }

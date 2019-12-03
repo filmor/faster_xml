@@ -2,54 +2,67 @@ use crate::element::{Content, Element, Type};
 use quick_xml::events::BytesEnd;
 use quick_xml::events::BytesStart;
 use quick_xml::events::BytesText;
-use rustler::NifResult;
 use rustler::Term;
 use rustler::{Encoder, Env};
-use std::collections::HashMap;
 
-type Output<'a> = HashMap<&'a str, Term<'a>>;
-
-pub(crate) struct Emitter<'a> {
-    env: Env<'a>,
-    element: &'a Element,
-    child: Option<Box<Emitter<'a>>>,
-    output: Output<'a>,
-    depth: i32,
+mod atoms {
+    rustler::rustler_atoms! {
+        atom undefined;
+    }
 }
 
-impl<'a> Emitter<'a> {
-    pub fn start<'b>(env: Env<'a>, element: &'a Element, start_tag: &BytesStart<'b>) -> Self {
+pub(crate) struct Emitter<'a, 'b> {
+    env: Env<'a>,
+    element: &'b Element,
+    child: Option<Box<Emitter<'a, 'b>>>,
+    output: Term<'a>,
+    depth: i32,
+    is_object: bool,
+}
+
+impl<'a, 'b> Emitter<'a, 'b> {
+    pub fn start<'c>(env: Env<'a>, element: &'b Element, start_tag: &BytesStart<'c>) -> Self {
         let mut res = Emitter {
             env,
             element,
             child: None,
-            output: HashMap::new(),
+            output: atoms::undefined().encode(env),
             depth: 0,
+            is_object: match element.content {
+                Content::Element(_) => false,
+                Content::Object(_) => true,
+            },
         };
 
         assert!(start_tag.name() == element.name.as_bytes());
 
-        for attr in start_tag.attributes().filter_map(|x| x.ok()) {
-            let key = String::from_utf8(attr.key.to_vec()).unwrap();
-            if let Some(typ) = element.attributes.get(&key) {
-                let attr_value = std::str::from_utf8(&attr.value).unwrap();
-                if let Some(result) = to_erlang(env, *typ, attr_value) {
-                    let attr_key = format!("@{}", key);
-                    res.output[attr_key.as_str()] = result;
+        if res.is_object {
+            let output = Term::map_new(env);
+
+            for attr in start_tag.attributes().filter_map(|x| x.ok()) {
+                let key = String::from_utf8(attr.key.to_vec()).unwrap();
+                if let Some(typ) = element.attributes.get(&key) {
+                    let attr_value = std::str::from_utf8(&attr.value).unwrap();
+                    if let Some(result) = to_erlang(env, *typ, attr_value) {
+                        let attr_key = format!("@{}", key).encode(env);
+                        output.map_put(attr_key, result);
+                    }
                 }
             }
+
+            res.output = output;
         }
 
         res
     }
 
-    pub fn start_child<'b>(&mut self, start_tag: &BytesStart) {
+    pub fn start_child<'c>(&mut self, start_tag: &BytesStart<'c>) {
         self.depth += 1;
 
-        if let Some(child) = self.child {
+        if let Some(ref mut child) = self.child {
             child.start_child(start_tag);
         } else {
-            if let Content::Object(children) = self.element.content {
+            if let Content::Object(children) = &self.element.content {
                 let key = String::from_utf8(start_tag.name().to_vec()).unwrap();
                 if let Some(child_element) = children.get(&key) {
                     self.child = Some(Box::new(Self::start(self.env, &child_element, start_tag)))
@@ -58,27 +71,27 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub fn text<'b>(&mut self, text: &BytesText<'b>) {
-        if let Some(child) = self.child {
+    pub fn text<'c>(&mut self, text: &BytesText<'c>) {
+        if let Some(ref mut child) = self.child {
             child.text(text);
         }
 
-        if self.depth == 0 {
+        if self.depth == 0 && !self.is_object {
             if let Content::Element(typ) = self.element.content {
-                
+                if let Some(value) = to_erlang(self.env, typ, std::str::from_utf8(text).unwrap()) {
+                    self.output = value;
+                }
             }
         }
     }
 
-    pub fn end<'b>(&mut self, end: &BytesEnd<'b>) -> bool {
+    pub fn end<'c>(&mut self, end: &BytesEnd<'c>) -> bool {
         self.depth -= 1;
 
-        if let Some(child) = self.child {
+        if let Some(ref mut child) = self.child {
             if child.end(end) {
-                if let Some(output) = child.output().ok() {
-                    self.output[child.element.name.as_str()] = output;
-                }
-
+                self.output
+                    .map_put(child.element.name.encode(self.env), child.output());
                 self.child = None;
             }
         }
@@ -86,13 +99,8 @@ impl<'a> Emitter<'a> {
         self.depth <= 0
     }
 
-    pub fn output(self) -> NifResult<Term<'a>> {
-        let map = Term::map_new(self.env);
-        for (k, v) in self.output {
-            map.map_put(k.encode(self.env), v)?;
-        }
-
-        Ok(map)
+    pub fn output(&self) -> Term<'a> {
+        self.output
     }
 }
 
