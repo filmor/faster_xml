@@ -10,7 +10,7 @@ path = "src/lib.rs"
 crate-type = ["dylib"]
 
 [dependencies]
-rustler = "0.21"
+rustler = { git = "https://github.com/rusterlium/rustler.git" }
 lazy_static = "1.4"
 quick-xml = "0.17"
 chrono = "0.4"

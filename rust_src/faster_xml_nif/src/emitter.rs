@@ -7,9 +7,7 @@ use rustler::Term;
 use rustler::{Encoder, Env};
 
 mod atoms {
-    rustler::rustler_atoms! {
-        atom undefined;
-    }
+    rustler::atoms! { undefined }
 }
 
 pub(crate) struct Emitter<'a, 'b> {

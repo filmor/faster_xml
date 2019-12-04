@@ -21,50 +21,37 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 mod atoms {
-    rustler::rustler_atoms! {
-        atom ok;
-        atom start;
-        atom end;
-        atom empty;
+    rustler::atoms! {
+        ok,
+        start,
+        end,
+        empty,
 
-        atom timestamp;
-        atom int;
-        atom float;
-        atom string;
+        timestamp,
+        int,
+        float,
+        string,
     }
 }
 
-rustler::rustler_export_nifs! {
-    "faster_xml",
-    [
-        ("parse", 3, parse),
-    ],
-    Some(on_load)
-}
+rustler::init! { "faster_xml", [parse], load = on_load }
 
 pub fn on_load<'a>(_env: Env<'a>, _load_info: Term<'a>) -> bool {
     true
 }
 
-fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
+#[rustler::nif]
+fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResult<Term<'a>> {
     let thread_env = OwnedEnv::new();
-    let copied_data = thread_env.save(args[1]);
+    let copied_data = thread_env.save(data);
 
-    let copied_pid = thread_env.save(args[0]);
-    let spec = spec_from_map(env, args[2].decode()?)?;
+    let copied_pid = thread_env.save(pid.encode(env));
+    let spec = spec_from_map(env, spec.decode()?)?;
 
     thread::spawn(move || {
         thread_env.run(|env| {
-            let pid: Pid = match copied_pid.load(env).decode() {
-                Ok(pid) => pid,
-                Err(err) => panic!(format!("Failed to get PID: {}", format_error(err))),
-            };
-
-            let data: Binary = match copied_data.load(env).decode() {
-                Ok(data) => data,
-                Err(_) => panic!("Failed to get Binary"),
-            };
-
+            let pid: Pid = copied_pid.load(env).decode().unwrap();
+            let data: Binary = copied_data.load(env).decode().unwrap();
             let reader = Cursor::new(data.as_slice());
             let mut reader = Reader::from_reader(reader);
 
@@ -108,7 +95,7 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
                             env.send(&pid, (&el.name, Emitter::start(env, el, t).output()).encode(env));
                         }
                     }
-                    Ok(Event::Eof) => break (),
+                    Ok(Event::Eof) => break (), // TODO
                     Ok(_) => (),
                     Err(_) => (),
                 }
@@ -117,15 +104,6 @@ fn parse<'a>(env: Env<'a>, args: &[Term<'a>]) -> NifResult<Term<'a>> {
     });
 
     Ok((atoms::ok()).encode(env))
-}
-
-fn format_error(err: Error) -> String {
-    match err {
-        Error::BadArg => format!("badarg"),
-        Error::Atom(s) => format!("{}", s),
-        Error::RaiseAtom(s) => format!("raise {}", s),
-        Error::RaiseTerm(_enc) => format!("raising term"),
-    }
 }
 
 fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> {
