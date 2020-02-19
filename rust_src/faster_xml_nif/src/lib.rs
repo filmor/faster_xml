@@ -14,7 +14,7 @@ use std::io::Cursor;
 use std::thread;
 
 use rustler;
-use rustler::types::{Binary, Pid};
+use rustler::types::{Binary, LocalPid};
 use rustler::{Encoder, Env, Error, NifResult, OwnedEnv, Term};
 
 use quick_xml::events::Event;
@@ -31,6 +31,8 @@ mod atoms {
         int,
         float,
         string,
+
+        done,
     }
 }
 
@@ -41,17 +43,25 @@ pub fn on_load<'a>(_env: Env<'a>, _load_info: Term<'a>) -> bool {
 }
 
 #[rustler::nif]
-fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResult<Term<'a>> {
+fn parse<'a>(
+    env: Env<'a>,
+    pid: LocalPid,
+    reference: Term<'a>,
+    data: Term<'a>,
+    spec: Term<'a>,
+) -> NifResult<Term<'a>> {
     let thread_env = OwnedEnv::new();
     let copied_data = thread_env.save(data);
 
     let copied_pid = thread_env.save(pid.encode(env));
+    let copied_ref = thread_env.save(reference);
     let spec = spec_from_map(env, spec.decode()?)?;
 
     thread::spawn(move || {
         thread_env.run(|env| {
-            let pid: Pid = copied_pid.load(env).decode().unwrap();
+            let pid: LocalPid = copied_pid.load(env).decode().unwrap();
             let data: Binary = copied_data.load(env).decode().unwrap();
+            let reference: Term<'_> = copied_ref.load(env);
             let reader = Cursor::new(data.as_slice());
             let mut reader = Reader::from_reader(reader);
 
@@ -66,7 +76,8 @@ fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResul
                             emitter.start_child(t);
                         }
 
-                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap()) {
+                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
+                        {
                             pending_emitters.push(Emitter::start(env, el, t));
                         }
                     }
@@ -81,7 +92,10 @@ fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResul
                         let mut to_delete = vec![];
                         for (n, emitter) in pending_emitters.iter_mut().enumerate() {
                             if emitter.end(t) {
-                                env.send(&pid, (emitter.name(), emitter.output()).encode(env));
+                                env.send(
+                                    &pid,
+                                    (reference, emitter.name(), emitter.output()).encode(env),
+                                );
                                 to_delete.push(n);
                             }
                         }
@@ -91,8 +105,13 @@ fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResul
                         }
                     }
                     Ok(Event::Empty(ref t)) => {
-                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap()) {
-                            env.send(&pid, (&el.name, Emitter::start(env, el, t).output()).encode(env));
+                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
+                        {
+                            env.send(
+                                &pid,
+                                (reference, &el.name, Emitter::start(env, el, t).output())
+                                    .encode(env),
+                            );
                         }
                     }
                     Ok(Event::Eof) => break (), // TODO
@@ -100,6 +119,8 @@ fn parse<'a>(env: Env<'a>, pid: Pid, data: Term<'a>, spec: Term<'a>) -> NifResul
                     Err(_) => (),
                 }
             }
+
+            env.send(&pid, (reference, atoms::done()).encode(env));
         })
     });
 

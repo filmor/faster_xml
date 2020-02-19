@@ -6,7 +6,7 @@
 
 -export([
     parse/2,
-    parse/3,
+    parse/4,
     parse_file/2
 ]).
 
@@ -15,15 +15,18 @@
 init() ->
     erlang:load_nif(?crate_faster_xml_nif, 0).
 
--spec parse(binary(), pattern()) -> ok.
+-spec parse(binary(), pattern()) -> {ok, reference()}.
 parse(Bin, Pattern) ->
-    parse(self(), Bin, Pattern).
+    Ref = make_ref(),
+    Pid = self(),
+    parse(Pid, Ref, Bin, Pattern),
+    {ok, Ref}.
 
--spec parse(pid(), binary(), pattern()) -> ok.
-parse(_Pid, _Bin, _Pattern) ->
+-spec parse(pid(), reference(), binary(), pattern()) -> {ok, reference()}.
+parse(_Pid, _Ref, _Bin, _Pattern) ->
     erlang:nif_error(nif_not_loaded).
 
--spec parse_file(filename:type(), pattern()) -> ok.
+-spec parse_file(filename:type(), pattern()) -> {ok, reference()}.
 parse_file(FName, Pattern) ->
     {ok, Bin} = file:read_file(FName),
     parse(Bin, Pattern).
@@ -39,7 +42,7 @@ epias_test_() ->
     {timeout, 30, ?_assert(epias_case())}.
 
 epex_case() ->
-    ok = faster_xml:parse_file(
+    {ok, Ref} = faster_xml:parse_file(
         "epex.xml",
         #{
             <<"PblcTradeConf">> => #{
@@ -51,7 +54,7 @@ epex_case() ->
         }
     ),
 
-    {N, {<<"PblcTradeConf">>, Last}} = flush(0, undefined),
+    {N, {Ref, <<"PblcTradeConf">>, Last}} = flush(0, undefined),
 
     ?assert(N > 0),
 
@@ -68,7 +71,7 @@ epex_case() ->
     true.
 
 epias_case() ->
-    ok = faster_xml:parse_file(
+    {ok, Ref} = faster_xml:parse_file(
         "epias.xml",
         #{
             <<"Teklif">> => #{
@@ -79,7 +82,7 @@ epias_case() ->
         }
     ),
 
-    {N, {<<"Teklif">>, Last}} = flush(0, undefined),
+    {N, {Ref, <<"Teklif">>, Last}} = flush(0, undefined),
 
     ?assert(N > 0),
 
@@ -96,10 +99,13 @@ epias_case() ->
 
 
 flush(N, Last) ->
-    receive _Msg ->
-        flush(N + 1, _Msg)
+    receive
+        {_, done} ->
+            {N, Last};
+        Msg ->
+            flush(N + 1, Msg)
     after 1000 ->
-        {N, Last}
+        {error, no_done, {N, Last}}
     end.
 
 -endif.
