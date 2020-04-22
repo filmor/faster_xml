@@ -13,7 +13,7 @@
 -on_load(init/0).
 
 init() ->
-    erlang:load_nif(?crate_faster_xml_nif, 0).
+    ?load_nif_from_crate(faster_xml, ?crate_faster_xml_nif, 0).
 
 -spec parse(binary(), pattern()) -> {ok, reference()}.
 parse(Bin, Pattern) ->

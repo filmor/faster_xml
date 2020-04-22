@@ -12,5 +12,5 @@ crate-type = ["dylib"]
 [dependencies]
 rustler = { git = "https://github.com/rusterlium/rustler.git" }
 lazy_static = "1.4"
-quick-xml = "0.17"
+quick-xml = "0.18"
 chrono = "0.4"
