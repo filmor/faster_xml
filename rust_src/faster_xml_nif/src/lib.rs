@@ -133,7 +133,7 @@ fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> 
     for (key, value) in map {
         let name: &str = key.decode()?;
 
-        dbg!(name);
+        // dbg!(name);
 
         spec.add(name, element_from_map(env, name, value)?);
     }
@@ -144,7 +144,7 @@ fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> 
 fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<Element> {
     if term.is_map() {
         if name.starts_with('@') {
-            dbg!(name);
+            // dbg!(name);
             return Err(Error::BadArg);
         }
 
@@ -154,7 +154,7 @@ fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<E
 
         for (key, val) in map {
             let inner_name: &str = key.decode()?;
-            dbg!(inner_name);
+            // dbg!(inner_name);
 
             if inner_name.starts_with('@') {
                 let value = as_type(val)?;
@@ -169,7 +169,7 @@ fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<E
     } else if term.is_atom() {
         Ok(Element::element(name, HashMap::new(), as_type(term)?))
     } else {
-        dbg!(term);
+        // dbg!(term);
         Err(Error::BadArg)
     }
 }
