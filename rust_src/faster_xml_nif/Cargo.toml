@@ -7,7 +7,7 @@ edition = "2018"
 [lib]
 name = "faster_xml_nif"
 path = "src/lib.rs"
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 rustler = { git = "https://github.com/rusterlium/rustler.git" }
