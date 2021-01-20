@@ -2,7 +2,22 @@
 
 -include("crates.hrl").
 
--type pattern() :: any().
+-type spec() :: #{
+    Tag :: binary() => element_spec()
+}.
+
+% Key may start with "@" to address attributes
+-type element_spec() :: #{
+    Key :: binary() => item_type()
+}.
+
+-type item_type() ::
+    int
+    | timestamp
+    | float
+    | string
+    | element_spec()
+    | {list, item_type()}.
 
 -export([
     parse/2,
@@ -10,102 +25,34 @@
     parse_file/2
 ]).
 
+-export_type([
+    spec/0,
+    item_type/0,
+    element_spec/0
+]).
+
 -on_load(init/0).
 
 init() ->
     ?load_nif_from_crate(faster_xml, ?crate_faster_xml_nif, 0).
 
--spec parse(binary(), pattern()) -> {ok, reference()}.
-parse(Bin, Pattern) ->
+-spec parse(binary(), spec()) -> {ok, reference()}.
+parse(Bin, Spec) ->
     Ref = make_ref(),
     Pid = self(),
-    parse(Pid, Ref, Bin, Pattern),
+    parse(Pid, Ref, Bin, Spec),
     {ok, Ref}.
 
--spec parse(pid(), reference(), binary(), pattern()) -> {ok, reference()}.
-parse(_Pid, _Ref, _Bin, _Pattern) ->
+-spec parse(pid(), reference(), binary(), spec()) -> {ok, reference()}.
+parse(_Pid, _Ref, _Bin, _Spec) ->
     erlang:nif_error(nif_not_loaded).
 
--spec parse_file(filename:type(), pattern()) -> {ok, reference()}.
-parse_file(FName, Pattern) ->
+-spec parse_file(filename:type(), spec()) -> {ok, reference()}.
+parse_file(FName, Spec) ->
     {ok, Bin} = file:read_file(FName),
-    parse(Bin, Pattern).
-
+    parse(Bin, Spec).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
-
-epex_test_() ->
-    {timeout, 30, ?_assert(epex_case())}.
-
-epias_test_() ->
-    {timeout, 30, ?_assert(epias_case())}.
-
-epex_case() ->
-    {ok, Ref} = faster_xml:parse_file(
-        "epex.xml",
-        #{
-            <<"PblcTradeConf">> => #{
-                <<"@qty">> => int,
-                <<"@px">> => int,
-                <<"@tradeExecTime">> => timestamp,
-                <<"@revisionNo">> => int
-            }
-        }
-    ),
-
-    {N, {Ref, <<"PblcTradeConf">>, Last}} = flush(0, undefined),
-
-    ?assert(N > 0),
-
-    ?assertMatch(
-        #{
-            <<"@qty">> := _,
-            <<"@px">> := _,
-            <<"@tradeExecTime">> := _,
-            <<"@revisionNo">> := _
-        },
-        Last
-    ),
-
-    true.
-
-epias_case() ->
-    {ok, Ref} = faster_xml:parse_file(
-        "epias.xml",
-        #{
-            <<"Teklif">> => #{
-                <<"fiyat">> => float,
-                <<"miktar">> => int,
-                <<"kalanMiktar">> => int
-            }
-        }
-    ),
-
-    {N, {Ref, <<"Teklif">>, Last}} = flush(0, undefined),
-
-    ?assert(N > 0),
-
-    ?assertMatch(
-        #{
-            <<"fiyat">> := _,
-            <<"miktar">> := _,
-            <<"kalanMiktar">> := _
-        },
-        Last
-    ),
-
-    true.
-
-
-flush(N, Last) ->
-    receive
-        {_, done} ->
-            {N, Last};
-        Msg ->
-            flush(N + 1, Msg)
-    after 1000 ->
-        {error, no_done, {N, Last}}
-    end.
 
 -endif.

@@ -20,7 +20,7 @@ pub(crate) struct Emitter<'a, 'b> {
 }
 
 impl<'a, 'b> Emitter<'a, 'b> {
-    pub fn start<'c>(env: Env<'a>, element: &'b Element, start_tag: &BytesStart<'c>) -> Self {
+    pub fn new<'c>(env: Env<'a>, element: &'b Element, start_tag: &BytesStart<'c>) -> Self {
         let mut res = Emitter {
             env,
             element,
@@ -56,24 +56,24 @@ impl<'a, 'b> Emitter<'a, 'b> {
         res
     }
 
-    pub fn start_child<'c>(&mut self, start_tag: &BytesStart<'c>) {
+    pub fn handle_start_child<'c>(&mut self, start_tag: &BytesStart<'c>) {
         self.depth += 1;
 
         if let Some(ref mut child) = self.child {
-            child.start_child(start_tag);
+            child.handle_start_child(start_tag);
         } else {
             if let Content::Object(children) = &self.element.content {
                 let key = String::from_utf8(start_tag.name().to_vec()).unwrap();
                 if let Some(child_element) = children.get(&key) {
-                    self.child = Some(Box::new(Self::start(self.env, &child_element, start_tag)))
+                    self.child = Some(Box::new(Self::new(self.env, &child_element, start_tag)))
                 }
             }
         }
     }
 
-    pub fn text<'c>(&mut self, text: &BytesText<'c>) {
+    pub fn handle_text<'c>(&mut self, text: &BytesText<'c>) {
         if let Some(ref mut child) = self.child {
-            child.text(text);
+            child.handle_text(text);
         }
 
         if self.depth == 1 && !self.is_object {
@@ -85,11 +85,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    pub fn end<'c>(&mut self, end: &BytesEnd<'c>) -> bool {
+    pub fn handle_end<'c>(&mut self, end: &BytesEnd<'c>) -> bool {
         self.depth -= 1;
 
         if let Some(ref mut child) = self.child {
-            if child.end(end) {
+            if child.handle_end(end) {
                 self.output = self
                     .output
                     .map_put(child.element.name.encode(self.env), child.output())

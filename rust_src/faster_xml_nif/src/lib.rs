@@ -23,24 +23,22 @@ use quick_xml::Reader;
 mod atoms {
     rustler::atoms! {
         ok,
-        start,
-        end,
+        open,
+        close,
+        element,
         empty,
 
         timestamp,
         int,
         float,
         string,
+        list,
 
         done,
     }
 }
 
-rustler::init! { "faster_xml", [parse], load = on_load }
-
-pub fn on_load<'a>(_env: Env<'a>, _load_info: Term<'a>) -> bool {
-    true
-}
+rustler::init! { "faster_xml", [parse] }
 
 #[rustler::nif]
 fn parse<'a>(
@@ -73,28 +71,37 @@ fn parse<'a>(
                 match reader.read_event(&mut buf) {
                     Ok(Event::Start(ref t)) => {
                         for emitter in pending_emitters.iter_mut() {
-                            emitter.start_child(t);
+                            emitter.handle_start_child(t);
                         }
 
                         if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
                         {
-                            pending_emitters.push(Emitter::start(env, el, t));
+                            let emitter = Emitter::new(env, el, t);
+
+                            env.send(
+                                &pid,
+                                (reference, emitter.name(), atoms::open(), emitter.output())
+                                    .encode(env),
+                            );
+
+                            pending_emitters.push(emitter);
                         }
                     }
 
                     Ok(Event::Text(ref t)) => {
                         for emitter in pending_emitters.iter_mut() {
-                            emitter.text(t);
+                            emitter.handle_text(t);
                         }
                     }
 
                     Ok(Event::End(ref t)) => {
                         let mut to_delete = vec![];
                         for (n, emitter) in pending_emitters.iter_mut().enumerate() {
-                            if emitter.end(t) {
+                            if emitter.handle_end(t) {
                                 env.send(
                                     &pid,
-                                    (reference, emitter.name(), emitter.output()).encode(env),
+                                    (reference, emitter.name(), atoms::close(), emitter.output())
+                                        .encode(env),
                                 );
                                 to_delete.push(n);
                             }
@@ -107,9 +114,15 @@ fn parse<'a>(
                     Ok(Event::Empty(ref t)) => {
                         if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
                         {
+                            let emitter = Emitter::new(env, el, t);
                             env.send(
                                 &pid,
-                                (reference, &el.name, Emitter::start(env, el, t).output())
+                                (
+                                    reference,
+                                    emitter.name(),
+                                    atoms::element(),
+                                    emitter.output(),
+                                )
                                     .encode(env),
                             );
                         }
