@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "faster_xml_nif"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "chrono 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "quick-xml 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
