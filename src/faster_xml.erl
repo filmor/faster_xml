@@ -1,6 +1,6 @@
 -module(faster_xml).
 
--include("crates.hrl").
+-include("cargo.hrl").
 
 -type spec() :: #{
     Tag :: binary() => element_spec()
@@ -34,7 +34,7 @@
 -on_load(init/0).
 
 init() ->
-    ?load_nif_from_crate(faster_xml, ?crate_faster_xml_nif, 0).
+    ?load_nif_from_crate(faster_xml_nif, 0).
 
 -spec parse(binary(), spec()) -> {ok, reference()}.
 parse(Bin, Spec) ->
