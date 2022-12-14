@@ -11,6 +11,7 @@ use rustler::MapIterator;
 
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::str::from_utf8;
 use std::thread;
 
 use rustler;
@@ -68,14 +69,13 @@ fn parse<'a>(
             let mut pending_emitters: Vec<Emitter> = vec![];
 
             loop {
-                match reader.read_event(&mut buf) {
+                match reader.read_event_into(&mut buf) {
                     Ok(Event::Start(ref t)) => {
                         for emitter in pending_emitters.iter_mut() {
                             emitter.handle_start_child(t);
                         }
 
-                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
-                        {
+                        if let Some(el) = spec.patterns.get(from_utf8(t.name().into_inner()).unwrap()) {
                             let emitter = Emitter::new(env, el, t);
 
                             env.send(
@@ -112,8 +112,7 @@ fn parse<'a>(
                         }
                     }
                     Ok(Event::Empty(ref t)) => {
-                        if let Some(el) = spec.patterns.get(std::str::from_utf8(t.name()).unwrap())
-                        {
+                        if let Some(el) = spec.patterns.get(from_utf8(t.name().as_ref()).unwrap()) {
                             let emitter = Emitter::new(env, el, t);
                             env.send(
                                 &pid,

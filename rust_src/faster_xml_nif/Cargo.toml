@@ -10,6 +10,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = { git = "https://github.com/rusterlium/rustler.git" }
-quick-xml = "0.20"
+rustler = "0.22.2"
+quick-xml = "0.26"
 chrono = "0.4"
