@@ -1,10 +1,7 @@
 use crate::element::{Content, Element, Type};
 use chrono::{Datelike, Timelike};
-use quick_xml::events::BytesEnd;
-use quick_xml::events::BytesStart;
-use quick_xml::events::BytesText;
-use rustler::Term;
-use rustler::{Encoder, Env};
+use quick_xml::events::{BytesStart, BytesText};
+use rustler::{Term, Encoder, Env};
 
 mod atoms {
     rustler::atoms! { undefined }
@@ -56,22 +53,20 @@ impl<'a, 'b> Emitter<'a, 'b> {
         res
     }
 
-    pub fn handle_start_child<'c>(&mut self, start_tag: &BytesStart<'c>) {
+    pub fn handle_start_child(&mut self, start_tag: &BytesStart<'_>) {
         self.depth += 1;
 
         if let Some(ref mut child) = self.child {
             child.handle_start_child(start_tag);
-        } else {
-            if let Content::Object(children) = &self.element.content {
-                let key = String::from_utf8(start_tag.name().into_inner().to_vec()).unwrap();
-                if let Some(child_element) = children.get(&key) {
-                    self.child = Some(Box::new(Self::new(self.env, &child_element, start_tag)))
-                }
+        } else if let Content::Object(children) = &self.element.content {
+            let key = String::from_utf8(start_tag.name().into_inner().to_vec()).unwrap();
+            if let Some(child_element) = children.get(&key) {
+                self.child = Some(Box::new(Self::new(self.env, child_element, start_tag)))
             }
         }
     }
 
-    pub fn handle_text<'c>(&mut self, text: &BytesText<'c>) {
+    pub fn handle_text(&mut self, text: &BytesText<'_>) {
         if let Some(ref mut child) = self.child {
             child.handle_text(text);
         }
@@ -85,11 +80,11 @@ impl<'a, 'b> Emitter<'a, 'b> {
         }
     }
 
-    pub fn handle_end<'c>(&mut self, end: &BytesEnd<'c>) -> bool {
+    pub fn handle_end(&mut self) -> bool {
         self.depth -= 1;
 
         if let Some(ref mut child) = self.child {
-            if child.handle_end(end) {
+            if child.handle_end() {
                 self.output = self
                     .output
                     .map_put(child.element.name.encode(self.env), child.output())

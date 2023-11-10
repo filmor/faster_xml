@@ -1,8 +1,8 @@
 [package]
 name = "faster_xml_nif"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Benedikt Reinartz <filmor@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "faster_xml_nif"
@@ -10,6 +10,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.22.2"
-quick-xml = "0.26"
+rustler = "0.30.0"
+quick-xml = "0.31"
 chrono = "0.4"

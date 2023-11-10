@@ -6,17 +6,13 @@ use crate::element::{Element, Type};
 use crate::emitter::Emitter;
 use crate::read_spec::ReadSpec;
 
-use rustler::Atom;
-use rustler::MapIterator;
-
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::str::from_utf8;
 use std::thread;
 
-use rustler;
 use rustler::types::{Binary, LocalPid};
-use rustler::{Encoder, Env, Error, NifResult, OwnedEnv, Term};
+use rustler::{Term, OwnedEnv, NifResult, MapIterator, Atom, Error, Encoder, Env};
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -54,7 +50,7 @@ fn parse<'a>(
 
     let copied_pid = thread_env.save(pid.encode(env));
     let copied_ref = thread_env.save(reference);
-    let spec = spec_from_map(env, spec.decode()?)?;
+    let spec = spec_from_map(spec.decode()?)?;
 
     thread::spawn(move || {
         thread_env.run(|env| {
@@ -78,7 +74,7 @@ fn parse<'a>(
                         if let Some(el) = spec.patterns.get(from_utf8(t.name().into_inner()).unwrap()) {
                             let emitter = Emitter::new(env, el, t);
 
-                            env.send(
+                           let _ = env.send(
                                 &pid,
                                 (reference, emitter.name(), atoms::open(), emitter.output())
                                     .encode(env),
@@ -94,11 +90,11 @@ fn parse<'a>(
                         }
                     }
 
-                    Ok(Event::End(ref t)) => {
+                    Ok(Event::End(ref _t)) => {
                         let mut to_delete = vec![];
                         for (n, emitter) in pending_emitters.iter_mut().enumerate() {
-                            if emitter.handle_end(t) {
-                                env.send(
+                            if emitter.handle_end() {
+                                let _ = env.send(
                                     &pid,
                                     (reference, emitter.name(), atoms::close(), emitter.output())
                                         .encode(env),
@@ -114,7 +110,7 @@ fn parse<'a>(
                     Ok(Event::Empty(ref t)) => {
                         if let Some(el) = spec.patterns.get(from_utf8(t.name().as_ref()).unwrap()) {
                             let emitter = Emitter::new(env, el, t);
-                            env.send(
+                            let _ = env.send(
                                 &pid,
                                 (
                                     reference,
@@ -126,20 +122,20 @@ fn parse<'a>(
                             );
                         }
                     }
-                    Ok(Event::Eof) => break (), // TODO
+                    Ok(Event::Eof) => break, // TODO
                     Ok(_) => (),
                     Err(_) => (),
                 }
             }
 
-            env.send(&pid, (reference, atoms::done()).encode(env));
+            let _ = env.send(&pid, (reference, atoms::done()).encode(env));
         })
     });
 
     Ok((atoms::ok()).encode(env))
 }
 
-fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> {
+fn spec_from_map(map: MapIterator<'_>) -> NifResult<ReadSpec> {
     let mut spec = ReadSpec::new();
 
     for (key, value) in map {
@@ -147,13 +143,13 @@ fn spec_from_map<'a>(env: Env<'a>, map: MapIterator<'a>) -> NifResult<ReadSpec> 
 
         // dbg!(name);
 
-        spec.add(name, element_from_map(env, name, value)?);
+        spec.add(name, element_from_map(name, value)?);
     }
 
     Ok(spec)
 }
 
-fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<Element> {
+fn element_from_map(name: &str, term: Term<'_>) -> NifResult<Element> {
     if term.is_map() {
         if name.starts_with('@') {
             // dbg!(name);
@@ -172,7 +168,7 @@ fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<E
                 let value = as_type(val)?;
                 attributes.insert(inner_name.chars().skip(1).collect(), value);
             } else {
-                let value = element_from_map(env, inner_name, val)?;
+                let value = element_from_map(inner_name, val)?;
                 content.insert(inner_name.to_owned(), value);
             }
         }
@@ -186,7 +182,7 @@ fn element_from_map<'a>(env: Env<'a>, name: &str, term: Term<'a>) -> NifResult<E
     }
 }
 
-fn as_type<'a>(term: Term<'a>) -> NifResult<Type> {
+fn as_type(term: Term<'_>) -> NifResult<Type> {
     let type_: Atom = term.decode()?;
 
     if type_ == atoms::int() {

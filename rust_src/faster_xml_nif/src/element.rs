@@ -16,6 +16,7 @@ impl Element {
         }
     }
 
+    #[allow(clippy::self_named_constructors)]
     pub fn element(name: &str, attributes: HashMap<String, Type>, content: Type) -> Self {
         Self::new(name, attributes, Content::Element(content))
     }
