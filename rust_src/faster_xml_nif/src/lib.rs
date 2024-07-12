@@ -35,7 +35,7 @@ mod atoms {
     }
 }
 
-rustler::init! { "faster_xml", [parse] }
+rustler::init!("faster_xml");
 
 #[rustler::nif]
 fn parse<'a>(

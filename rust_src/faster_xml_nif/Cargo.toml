@@ -10,6 +10,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.32"
-quick-xml = "0.31"
+rustler = "0.34"
+quick-xml = "0.36"
 chrono = "0.4"
