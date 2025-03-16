@@ -23,7 +23,7 @@ defmodule :faster_xml do
     ref = make_ref()
     pid = self()
     parse(pid, ref, bin, spec)
-    {:ok, Ref}
+    {:ok, ref}
   end
 
   # @spec parse(pid(), reference(), binary(), spec()) -> {ok, reference()}
