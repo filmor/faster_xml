@@ -8,11 +8,10 @@ use crate::read_spec::ReadSpec;
 
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::str::from_utf8;
 use std::thread;
 
 use rustler::types::{Binary, LocalPid};
-use rustler::{Term, OwnedEnv, NifResult, MapIterator, Atom, Error, Encoder, Env};
+use rustler::{Atom, Encoder, Env, Error, MapIterator, NifResult, OwnedEnv, Term};
 
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -71,10 +70,10 @@ fn parse<'a>(
                             emitter.handle_start_child(t);
                         }
 
-                        if let Some(el) = spec.patterns.get(from_utf8(t.name().into_inner()).unwrap()) {
+                        if let Some(el) = spec.patterns.get(t.name().into_inner()) {
                             let emitter = Emitter::new(env, el, t);
 
-                           let _ = env.send(
+                            let _ = env.send(
                                 &pid,
                                 (reference, emitter.name(), atoms::open(), emitter.output())
                                     .encode(env),
@@ -108,7 +107,7 @@ fn parse<'a>(
                         }
                     }
                     Ok(Event::Empty(ref t)) => {
-                        if let Some(el) = spec.patterns.get(from_utf8(t.name().as_ref()).unwrap()) {
+                        if let Some(el) = spec.patterns.get(t.name().as_ref()) {
                             let emitter = Emitter::new(env, el, t);
                             let _ = env.send(
                                 &pid,

@@ -10,6 +10,6 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.37"
-quick-xml = "0.39"
+rustler = { version = "0.39", features = ["nif_version_2_17"] }
+quick-xml = "0.42"
 chrono = "0.4"

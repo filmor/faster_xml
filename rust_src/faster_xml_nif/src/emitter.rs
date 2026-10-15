@@ -1,7 +1,7 @@
 use crate::element::{Content, Element, Type};
 use chrono::{Datelike, Timelike};
 use quick_xml::events::{BytesStart, BytesText};
-use rustler::{Term, Encoder, Env};
+use rustler::{Encoder, Env, Term};
 
 mod atoms {
     rustler::atoms! { undefined }
@@ -30,16 +30,16 @@ impl<'a, 'b> Emitter<'a, 'b> {
             },
         };
 
-        assert!(start_tag.name().into_inner() == element.name.as_bytes());
+        assert!(start_tag.name().into_inner() == element.name);
         // dbg!(&element.name);
 
         if res.is_object {
             let mut output = Term::map_new(env);
 
             for attr in start_tag.attributes().filter_map(|x| x.ok()) {
-                let key = String::from_utf8(attr.key.into_inner().to_vec()).unwrap();
-                if let Some(typ) = element.attributes.get(&key) {
-                    let attr_value = std::str::from_utf8(&attr.value).unwrap();
+                let key = attr.key.into_inner();
+                if let Some(typ) = element.attributes.get(key) {
+                    let attr_value = &attr.value;
                     if let Some(result) = to_erlang(env, *typ, attr_value) {
                         let attr_key = format!("@{}", key).encode(env);
                         output = output.map_put(attr_key, result).ok().unwrap();
@@ -59,8 +59,8 @@ impl<'a, 'b> Emitter<'a, 'b> {
         if let Some(ref mut child) = self.child {
             child.handle_start_child(start_tag);
         } else if let Content::Object(children) = &self.element.content {
-            let key = String::from_utf8(start_tag.name().into_inner().to_vec()).unwrap();
-            if let Some(child_element) = children.get(&key) {
+            let key = start_tag.name().into_inner();
+            if let Some(child_element) = children.get(key) {
                 self.child = Some(Box::new(Self::new(self.env, child_element, start_tag)))
             }
         }
@@ -73,7 +73,7 @@ impl<'a, 'b> Emitter<'a, 'b> {
 
         if self.depth == 1 && !self.is_object {
             if let Content::Element(typ) = self.element.content {
-                if let Some(value) = to_erlang(self.env, typ, std::str::from_utf8(text).unwrap()) {
+                if let Some(value) = to_erlang(self.env, typ, text) {
                     self.output = value;
                 }
             }
